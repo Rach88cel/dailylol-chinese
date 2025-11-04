@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DailyLOL Chinese</title>
+<style>
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; background:#fafafa; }
+  .wrap { max-width: 720px; margin: 40px auto; padding: 24px; background:#fff; border-radius: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.06); }
+  h1 { margin: 0 0 10px; font-size: 24px; }
+  .sub { color:#666; margin-bottom: 24px; }
+  .card { border:1px solid #eee; border-radius: 12px; padding: 20px; margin:16px 0; }
+  .en { font-weight: 600; font-size: 18px; color:#333; }
+  .zh { font-size: 32px; margin: 10px 0 4px; }
+  .py { font-size: 16px; color:#777; }
+  .controls { display:flex; gap:10px; flex-wrap:wrap; margin-top: 16px; }
+  button { padding:10px 14px; border:1px solid #ddd; border-radius:10px; background:#fff; cursor:pointer; }
+  button:hover { background:#f5f5f5; }
+  .muted { color:#888; font-size: 13px; }
+  .footer { margin-top: 24px; color:#888; font-size: 12px; }
+  .badge { font-size:12px; padding:2px 8px; border:1px solid #ddd; border-radius:999px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>DailyLOL Chinese <span class="badge">MVP</span></h1>
+    <div class="sub">One funny, useful Chinese line a day — with pinyin and TTS (x3).</div>
+
+    <div class="card">
+      <div class="en" id="en">How to say: “Don’t talk to me.”</div>
+      <div class="zh" id="zh">别跟我说话。</div>
+      <div class="py" id="py">bié gēn wǒ shuōhuà.</div>
+
+      <div class="controls">
+        <button id="play">▶️ Play (x3)</button>
+        <button id="next">🎲 Random</button>
+        <button id="today">📅 Today</button>
+        <button id="togglePy">👁️ Toggle Pinyin</button>
+        <button id="copy">📋 Copy</button>
+      </div>
+      <div class="muted" id="voiceInfo">Loading voices…</div>
+    </div>
+
+    <div class="footer">
+      Tip: On iPhone, first tap “Play” once to allow audio. Uses browser speech synthesis (zh-CN if available).
+    </div>
+  </div>
+
+<script>
+/** ------- Data (你可以在这里增加条目) ------- **/
+let PHRASES = [];
+fetch('phrases.json')
+  .then(res => res.json())
+  .then(data => { PHRASES = data; render(pickDailyIndex()); });
+
+/** ------- Elements ------- **/
+const enEl = document.getElementById('en');
+const zhEl = document.getElementById('zh');
+const pyEl = document.getElementById('py');
+const voiceInfoEl = document.getElementById('voiceInfo');
+const playBtn = document.getElementById('play');
+const nextBtn = document.getElementById('next');
+const todayBtn = document.getElementById('today');
+const togglePyBtn = document.getElementById('togglePy');
+const copyBtn = document.getElementById('copy');
+
+/** ------- State ------- **/
+let currentIndex = 0;
+let voices = [];
+let zhVoice = null;
+
+/** ------- Helpers ------- **/
+function pickDailyIndex() {
+  // 用日期做索引：同一天固定同一句（可分享/可复现）
+  const d = new Date();
+  const seed = d.getFullYear()*10000 + (d.getMonth()+1)*100 + d.getDate();
+  return seed % PHRASES.length;
+}
+
+function render(idx) {
+  const item = PHRASES[idx];
+  enEl.textContent = item.en;
+  zhEl.textContent = item.zh;
+  pyEl.textContent = item.py;
+  currentIndex = idx;
+}
+
+function randomIndex() {
+  let idx = Math.floor(Math.random() * PHRASES.length);
+  if (idx === currentIndex && PHRASES.length > 1) {
+    idx = (idx + 1) % PHRASES.length;
+  }
+  return idx;
+}
+
+function loadVoices() {
+  voices = window.speechSynthesis.getVoices() || [];
+  // 优先中文语音
+  zhVoice = voices.find(v => /zh|Chinese/i.test(v.lang) || /Chinese/i.test(v.name)) || null;
+  if (zhVoice) {
+    voiceInfoEl.textContent = `Voice: ${zhVoice.name} (${zhVoice.lang})`;
+  } else {
+    voiceInfoEl.textContent = 'Voice: zh-CN not found — will fall back to default voice.';
+  }
+}
+
+function speak(text, times = 3, gapMs = 700) {
+  if (!('speechSynthesis' in window)) {
+    alert('Speech Synthesis not supported in this browser.');
+    return;
+  }
+  // 阻止叠音
+  window.speechSynthesis.cancel();
+  let count = 0;
+  function once() {
+    const u = new SpeechSynthesisUtterance(text);
+    if (zhVoice) u.voice = zhVoice;
+    u.rate = 0.95; // 慢一点更清晰
+    u.onend = () => {
+      count++;
+      if (count < times) setTimeout(once, gapMs);
+    };
+    speechSynthesis.speak(u);
+  }
+  once();
+}
+
+/** ------- Events ------- **/
+playBtn.addEventListener('click', () => {
+  speak(PHRASES[currentIndex].zh, 3);
+});
+
+nextBtn.addEventListener('click', () => {
+  render(randomIndex());
+  // 可选：自动播
+  // speak(PHRASES[currentIndex].zh, 3);
+});
+
+todayBtn.addEventListener('click', () => {
+  render(pickDailyIndex());
+  // speak(PHRASES[currentIndex].zh, 3);
+});
+
+let pyVisible = true;
+togglePyBtn.addEventListener('click', () => {
+  pyVisible = !pyVisible;
+  pyEl.style.display = pyVisible ? 'block' : 'none';
+});
+
+copyBtn.addEventListener('click', async () => {
+  const item = PHRASES[currentIndex];
+  const text = `${item.en}\n${item.zh}\n${item.py}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    copyBtn.textContent = '✅ Copied';
+    setTimeout(() => copyBtn.textContent = '📋 Copy', 1200);
+  } catch {
+    alert('Copy failed.');
+  }
+});
+
+/** ------- Init ------- **/
+render(pickDailyIndex());
+loadVoices();
+if (typeof speechSynthesis !== 'undefined') {
+  speechSynthesis.onvoiceschanged = loadVoices;
+}
+</script>
+</body>
+</html>
